@@ -70,7 +70,10 @@ for l in open(sys.argv[1]):
   (cd "$ROOT" && "$W/raijin-subs" --scope "$W/$name.scope" --input "bench/fixtures/$name/raw.jsonl" --pretty) > "$o/raijin_pretty.json"
   (cd "$ROOT" && "$W/raijin-subs" --scope "$W/$name.scope" --input "bench/fixtures/$name/raw.jsonl" --format table) > "$o/raijin_table.txt"
   echo; echo "## $name: $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["summary"])' "$o/raijin.json")"; echo
-  python3 "$HERE/verify.py" "$f/raw.jsonl" "$o/raijin.json"
+  # Verify the unbounded output: a run that outgrows --max-bytes cuts on purpose (and counts it in
+  # omitted), and passive sources can return far more names than when the fixtures were recorded.
+  (cd "$ROOT" && "$W/raijin-subs" --scope "$W/$name.scope" --input "bench/fixtures/$name/raw.jsonl" --max-bytes 0) > "$o/raijin_full.json"
+  python3 "$HERE/verify.py" "$f/raw.jsonl" "$o/raijin_full.json"
   "$PY" "$HERE/count_tokens.py" \
     "subfinder -json -cs + dnsx -json -omit-raw=$o/engines.jsonl" \
     "subfinder text + dnsx text=$o/subfinder.txt+$f/dnsx.txt" \
