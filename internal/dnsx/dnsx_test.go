@@ -7,7 +7,7 @@ import (
 
 func TestArgs(t *testing.T) {
 	got := strings.Join(Args("names.txt", Options{Rate: 50, Threads: 10, Resolvers: "1.1.1.1"}), " ")
-	want := "-l names.txt -a -aaaa -cname -resp -json -silent -nc -duc -omit-raw -rcode noerror,formerr,servfail,nxdomain,notimp,refused -rl 50 -t 10 -r 1.1.1.1"
+	want := "-l names.txt -a -aaaa -resp -json -silent -nc -duc -omit-raw -rcode noerror,formerr,servfail,nxdomain,notimp,refused -rl 50 -t 10 -r 1.1.1.1"
 	if got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}

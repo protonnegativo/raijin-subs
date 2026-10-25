@@ -98,8 +98,13 @@ func Run(ctx context.Context, names []string, opt Options) ([]Record, string, er
 
 // Args builds the dnsx command line. -rcode with every status makes dnsx write a line for names that
 // do not resolve too (NXDOMAIN, SERVFAIL...), and -omit-raw leaves the raw DNS messages out.
+//
+// There is no -cname on purpose. The A and AAAA answers already carry the CNAME chain, and dnsx writes
+// it in "cname". With -cname, dnsx also sends a CNAME query, which a resolver answers NOERROR even when
+// the chain ends at a name that does not exist, and that NOERROR replaces the NXDOMAIN of the A query:
+// the one status that makes a CNAME dangling would be lost (dnsx v1.2.1).
 func Args(listFile string, opt Options) []string {
-	args := []string{"-l", listFile, "-a", "-aaaa", "-cname", "-resp", "-json", "-silent", "-nc", "-duc", "-omit-raw",
+	args := []string{"-l", listFile, "-a", "-aaaa", "-resp", "-json", "-silent", "-nc", "-duc", "-omit-raw",
 		"-rcode", "noerror,formerr,servfail,nxdomain,notimp,refused"}
 	if opt.Rate > 0 {
 		args = append(args, "-rl", fmt.Sprint(opt.Rate))

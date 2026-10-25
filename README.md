@@ -193,7 +193,7 @@ go test ./...
 go vet ./...
 ```
 
-Standard library only. subfinder runs as a subprocess with `-json -cs -silent -nc -duc`, and dnsx with `-a -aaaa -cname -resp -json -silent -nc -duc -omit-raw -rcode noerror,formerr,servfail,nxdomain,notimp,refused`, so the binary stays small and the engines can be updated on their own. `-rcode` with every status makes dnsx write a line for the names that do not resolve too. The CLI tests run the live path offline with small fake engines; `testdata/sample.jsonl` is a synthetic run that hits every rule.
+Standard library only. subfinder runs as a subprocess with `-json -cs -silent -nc -duc`, and dnsx with `-a -aaaa -resp -json -silent -nc -duc -omit-raw -rcode noerror,formerr,servfail,nxdomain,notimp,refused`, so the binary stays small and the engines can be updated on their own. `-rcode` with every status makes dnsx write a line for the names that do not resolve too. There is no `-cname`, on purpose: the A and AAAA answers already carry the chain, which dnsx writes in `cname`, and with `-cname` dnsx v1.2.1 also sends a CNAME query whose NOERROR replaces the A query's NXDOMAIN, so a dangling CNAME would never be reported as `dangling`. The CLI tests run the live path offline with small fake engines; `testdata/sample.jsonl` is a synthetic run that hits every rule.
 
 ## Responsible use
 
