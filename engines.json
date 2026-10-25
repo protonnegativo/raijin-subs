@@ -1,0 +1,4 @@
+{
+  "subfinder": {"version": "2.6.7", "go": "github.com/projectdiscovery/subfinder/v2/cmd/subfinder"},
+  "dnsx": {"version": "1.2.1", "go": "github.com/projectdiscovery/dnsx/cmd/dnsx"}
+}

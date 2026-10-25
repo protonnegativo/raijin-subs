@@ -47,7 +47,18 @@ type Options struct {
 	Resolvers string
 	// Raw, if set, receives dnsx's JSONL output unchanged.
 	Raw io.Writer
+	// Stats, if set, counts the output lines and the ones without the fields Raijin reads.
+	Stats *Stats
 }
+
+// Stats counts dnsx's output lines: Bad have no "host" and "status_code" (or are not JSON), and give no
+// record.
+type Stats struct {
+	Lines, Bad int
+}
+
+// Fields are the fields every dnsx result must have.
+const Fields = "host and status_code"
 
 // Run resolves the names and returns every record, plus the last stderr lines if dnsx failed.
 func Run(ctx context.Context, names []string, opt Options) ([]Record, string, error) {
@@ -85,7 +96,7 @@ func Run(ctx context.Context, names []string, opt Options) ([]Record, string, er
 	if err := cmd.Start(); err != nil {
 		return nil, "", err
 	}
-	records, parseErr := Parse(r)
+	records, parseErr := parse(r, opt.Stats)
 	waitErr := cmd.Wait()
 	if parseErr != nil {
 		return records, tail(stderr.String(), 3), parseErr
@@ -121,16 +132,25 @@ func Args(listFile string, opt Options) []string {
 // Parse reads dnsx JSONL. Lines that are not JSON objects with a host and a status_code are skipped,
 // so a file with both engines' output can be read by both parsers.
 func Parse(r io.Reader) ([]Record, error) {
+	return parse(r, nil)
+}
+
+func parse(r io.Reader, st *Stats) ([]Record, error) {
+	if st == nil {
+		st = &Stats{}
+	}
 	var records []Record
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for sc.Scan() {
 		line := bytes.TrimSpace(sc.Bytes())
-		if len(line) == 0 || line[0] != '{' {
+		if len(line) == 0 {
 			continue
 		}
+		st.Lines++
 		var rec Record
-		if err := json.Unmarshal(line, &rec); err != nil || rec.Host == "" || rec.StatusCode == "" {
+		if line[0] != '{' || json.Unmarshal(line, &rec) != nil || rec.Host == "" || rec.StatusCode == "" {
+			st.Bad++
 			continue
 		}
 		records = append(records, rec)

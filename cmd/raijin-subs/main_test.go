@@ -159,10 +159,12 @@ func fakeEngines(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	sf := `#!/bin/sh
+[ "$1" = -version ] && { echo "[INF] Current Version: v2.6.7" >&2; exit 0; }
 for n in www api dev a.w b.w c.w d.w e.w; do echo "{\"host\":\"$n.example.com\",\"input\":\"example.com\",\"sources\":[\"crtsh\"]}"; done
 echo '{"host":"x.example.org","input":"example.com","sources":["crtsh"]}'
 `
 	dx := `#!/bin/sh
+[ "$1" = -version ] && { echo "[INF] Current Version: 1.2.1" >&2; exit 0; }
 while [ "$1" != "-l" ]; do shift; done
 while read -r n; do
   case "$n" in
@@ -293,5 +295,45 @@ func TestScopeAloneEnumeratesWhatTheScopeNames(t *testing.T) {
 	}
 	if len(res.Next) != 0 {
 		t.Errorf("next = %v", res.Next)
+	}
+}
+
+// An older dnsx gets an engine_version warning, and a dnsx that renamed status_code gets an
+// engine_format warning with its lines counted in omitted; neither changes the exit code.
+func TestEngineVersionAndFormatWarnings(t *testing.T) {
+	sf, dx := fakeEngines(t)
+	b, err := os.ReadFile(dx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.ReplaceAll(string(b), "Current Version: 1.2.1", "Current Version: 1.1.0")
+	body = strings.ReplaceAll(body, `\"status_code\"`, `\"status\"`)
+	if err := os.WriteFile(dx, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := run([]string{"--scope", scopeFile(t), "-d", "example.com", "--subfinder", sf, "--dnsx", dx, "--raw", filepath.Join(t.TempDir(), "raw.jsonl")}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, out.String())
+	}
+	var v struct {
+		output
+		Omitted map[string]int
+	}
+	if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]string{}
+	for _, e := range v.Errors {
+		kinds[e.Kind] = e.Hint
+	}
+	if h := kinds["engine_version"]; !strings.HasPrefix(h, "dnsx 1.1.0 is not the tested 1.2.1") || !strings.Contains(h, "go install github.com/projectdiscovery/dnsx/cmd/dnsx@v1.2.1") {
+		t.Errorf("engine_version: %q", h)
+	}
+	if h := kinds["engine_format"]; !strings.HasPrefix(h, "8 of 8 dnsx results had no host and status_code") {
+		t.Errorf("engine_format: %q", h)
+	}
+	if v.Omitted["unparsed"] != 8 {
+		t.Errorf("omitted = %v", v.Omitted)
 	}
 }

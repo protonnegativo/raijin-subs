@@ -12,12 +12,14 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"sort"
 	"strings"
 
 	"github.com/protonnegativo/raijin-subs/internal/banner"
 	"github.com/protonnegativo/raijin-subs/internal/dnsx"
+	"github.com/protonnegativo/raijin-subs/internal/engines"
 	"github.com/protonnegativo/raijin-subs/internal/reduce"
 	"github.com/protonnegativo/raijin-subs/internal/schema"
 	"github.com/protonnegativo/raijin-subs/internal/scope"
@@ -173,8 +175,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
 		var stderrTail string
+		checkVersion(ctx, "subfinder", *sfBin, &res)
+		var sfStats subfinder.Stats
 		hosts, stderrTail, err = subfinder.Run(ctx, roots, subfinder.Options{
-			Binary: *sfBin, Timeout: *timeout, MaxTime: *maxTime, Extra: fs.Args(), Raw: raw,
+			Binary: *sfBin, Timeout: *timeout, MaxTime: *maxTime, Extra: fs.Args(), Raw: raw, Stats: &sfStats,
 		})
 		switch {
 		case errors.Is(err, subfinder.ErrNotFound):
@@ -188,10 +192,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 		case err != nil:
 			res.Errors = append(res.Errors, engineError(err, stderrTail))
 		}
+		// Output lines without the fields the reducer reads: the engine's format may have changed.
+		if sfStats.Bad > 0 {
+			res.Errors = append(res.Errors, engines.Format("subfinder", sfStats.Bad, sfStats.Lines, subfinder.Fields, *rawPath))
+			res.Omitted["unparsed"] += sfStats.Unparsed
+		}
 
 		opt.Resolved = !*noResolve
+		var dxStats dnsx.Stats
 		if names := namesInScope(hosts, sc); !*noResolve && len(names) > 0 {
-			dopt := dnsx.Options{Binary: *dnsxBin, Rate: *rate, Threads: *threads, Resolvers: *resolvers, Raw: raw}
+			checkVersion(ctx, "dnsx", *dnsxBin, &res)
+			dopt := dnsx.Options{Binary: *dnsxBin, Rate: *rate, Threads: *threads, Resolvers: *resolvers, Raw: raw, Stats: &dxStats}
 			records, stderrTail, err = dnsx.Run(ctx, names, dopt)
 			switch {
 			case errors.Is(err, dnsx.ErrNotFound):
@@ -216,6 +227,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 				}
 				records = append(records, more...)
 			}
+		}
+		if dxStats.Bad > 0 {
+			res.Errors = append(res.Errors, engines.Format("dnsx", dxStats.Bad, dxStats.Lines, dnsx.Fields, *rawPath))
+			res.Omitted["unparsed"] += dxStats.Bad
 		}
 	}
 
@@ -253,6 +268,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	write(stdout, &res, *format, *pretty)
 	return code
+}
+
+// checkVersion adds an engine_version error when the installed engine is not a tested version. A missing
+// binary is left to the run, which reports it.
+func checkVersion(ctx context.Context, name, bin string, res *schema.Result) {
+	path, err := exec.LookPath(bin)
+	if err != nil {
+		return
+	}
+	if e, ok := engines.Check(ctx, name, path); ok {
+		res.Errors = append(res.Errors, e)
+	}
 }
 
 func engineError(err error, stderrTail string) schema.Error {

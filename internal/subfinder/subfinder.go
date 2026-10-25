@@ -34,7 +34,18 @@ type Options struct {
 	Extra   []string
 	// Raw, if set, receives subfinder's JSONL output unchanged.
 	Raw io.Writer
+	// Stats, if set, counts the output lines and the ones without the fields Raijin reads.
+	Stats *Stats
 }
+
+// Stats counts subfinder's output lines: Bad have no "host" (or are not JSON), Unparsed are the bad
+// lines that gave no result either.
+type Stats struct {
+	Lines, Bad, Unparsed int
+}
+
+// Fields are the fields every subfinder result must have.
+const Fields = "host"
 
 // Run enumerates the root domains and returns every result, plus the last stderr lines if subfinder failed.
 func Run(ctx context.Context, roots []string, opt Options) ([]Result, string, error) {
@@ -72,7 +83,7 @@ func Run(ctx context.Context, roots []string, opt Options) ([]Result, string, er
 	if err := cmd.Start(); err != nil {
 		return nil, "", err
 	}
-	results, parseErr := Parse(r)
+	results, parseErr := parse(r, opt.Stats)
 	waitErr := cmd.Wait()
 	if parseErr != nil {
 		return results, tail(stderr.String(), 3), parseErr
@@ -99,6 +110,13 @@ func Args(listFile string, opt Options) []string {
 // output). JSON lines from dnsx (they carry "status_code" or "resolver") are skipped, so a file with both
 // engines' output can be read by both parsers.
 func Parse(r io.Reader) ([]Result, error) {
+	return parse(r, nil)
+}
+
+func parse(r io.Reader, st *Stats) ([]Result, error) {
+	if st == nil {
+		st = &Stats{}
+	}
 	var results []Result
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
@@ -107,14 +125,20 @@ func Parse(r io.Reader) ([]Result, error) {
 		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
+		st.Lines++
 		if line[0] != '{' {
+			st.Bad++
 			if name := string(line); strings.Contains(name, ".") && !strings.ContainsAny(name, " \t[]{}\"") {
 				results = append(results, Result{Host: name})
+			} else {
+				st.Unparsed++
 			}
 			continue
 		}
 		var probe map[string]json.RawMessage
 		if err := json.Unmarshal(line, &probe); err != nil {
+			st.Bad++
+			st.Unparsed++
 			continue
 		}
 		if _, ok := probe["status_code"]; ok {
@@ -125,6 +149,8 @@ func Parse(r io.Reader) ([]Result, error) {
 		}
 		var res Result
 		if err := json.Unmarshal(line, &res); err != nil || res.Host == "" {
+			st.Bad++
+			st.Unparsed++
 			continue
 		}
 		if len(res.Sources) == 0 && res.Source != "" {

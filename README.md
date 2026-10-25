@@ -189,6 +189,10 @@ The Raijin banner is **off by default**, so normal runs stay small. `--banner` p
 | `--subfinder`, `--dnsx` | subfinder, dnsx | paths to the binaries |
 | `--banner` | false | print the banner to stderr |
 
+## Engine versions
+
+The tested subfinder and dnsx versions are in [`engines.json`](engines.json), built into the binary. When the installed engine is another major version or older than the tested one, raijin-subs adds an `engine_version` error with the install command; when an engine's output lines lack the fields it reads (subfinder `host`, dnsx `host` and `status_code`), it adds an `engine_format` error and counts the lines in `omitted.unparsed`. Neither stops the run. A weekly GitHub Actions job runs the benchmark with the latest engines and opens a PR to bump `engines.json` when it passes, or an issue when it breaks.
+
 ## Development
 
 ```bash
