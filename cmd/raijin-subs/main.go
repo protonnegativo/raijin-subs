@@ -202,9 +202,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 			checkVersion(ctx, "dnsx", *dnsxBin, &res)
 			dopt := dnsx.Options{Binary: *dnsxBin, Rate: *rate, Threads: *threads, Resolvers: *resolvers, Raw: raw, Stats: &dxStats}
 			records, stderrTail, err = dnsx.Run(ctx, names, dopt)
+			sent, dnsxFailed := names, err != nil
 			switch {
 			case errors.Is(err, dnsx.ErrNotFound):
-				res.Errors = append(res.Errors, schema.Error{Kind: "missing_engine", Hint: "install dnsx (go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest) or pass --dnsx <path>, or run raijin-mcp update; the names below are not resolved"})
+				install := "go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest"
+				if m, err := engines.Tested(); err == nil && m["dnsx"].Version != "" {
+					install = m["dnsx"].Install(m["dnsx"].Version) // not @latest: dnsx 1.3.x is known-bad
+				}
+				res.Errors = append(res.Errors, schema.Error{Kind: "missing_engine", Hint: "install dnsx (" + install + ") or pass --dnsx <path>, or run raijin-mcp update --pinned; the names below are not resolved"})
 				opt.Resolved = false
 				code = 2
 			case err != nil:
@@ -222,13 +227,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 				more, stderrTail, err := dnsx.Run(ctx, probes, dopt)
 				if err != nil {
 					res.Errors = append(res.Errors, engineError(err, stderrTail))
+					dnsxFailed = true
 				}
 				records = append(records, more...)
+				sent = append(append([]string(nil), names...), probes...)
 			}
-		}
-		if dxStats.Bad > 0 {
-			res.Errors = append(res.Errors, engines.Format("dnsx", dxStats.Bad, dxStats.Lines, dnsx.Fields, *rawPath))
-			res.Omitted["unparsed"] += dxStats.Bad
+			if dxStats.Bad > 0 {
+				res.Errors = append(res.Errors, engines.Format("dnsx", dxStats.Bad, dxStats.Lines, dnsx.Fields, *rawPath))
+				res.Omitted["unparsed"] += dxStats.Bad
+			}
+			// With -rcode dnsx writes a line for every name, resolved or not. A name with no line is
+			// still listed (NOANSWER), but dnsx lost its status: say so. Lines that did not parse are
+			// counted above, and a dnsx that failed is an engine_error already.
+			if !dnsxFailed {
+				if missing := dnsx.Missing(sent, records) - dxStats.Bad; missing > 0 {
+					res.Errors = append(res.Errors, engines.NoLine(missing, len(sent)))
+				}
+			}
 		}
 	}
 

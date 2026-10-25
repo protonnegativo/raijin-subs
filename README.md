@@ -45,7 +45,7 @@ go install github.com/protonnegativo/raijin-subs/cmd/raijin-subs@latest
 
 That installs the latest release.
 
-You also need `subfinder` and `dnsx` on `PATH`, or pass `--subfinder <path>` and `--dnsx <path>`.
+You also need `subfinder` and `dnsx` on `PATH`, or pass `--subfinder <path>` and `--dnsx <path>`. Use dnsx 1.2.1 (`go install github.com/projectdiscovery/dnsx/cmd/dnsx@v1.2.1`), not 1.3.x: see [Engine versions](#engine-versions).
 
 **Versions.** Releases are tagged automatically on every change and every passing engine update. `raijin-subs --version` shows the release and the tested engine versions (`raijin-subs v0.1.3 (tested with dnsx 1.2.1, subfinder 2.6.7)`). `raijin-mcp update` updates every Raijin tool at once.
 
@@ -195,7 +195,9 @@ The Raijin banner is **off by default**, so normal runs stay small. `--banner` p
 
 ## Engine versions
 
-The tested subfinder and dnsx versions are in [`engines.json`](engines.json), built into the binary. When the installed engine is another major version or older than the tested one, raijin-subs adds an `engine_version` error with the install command; when an engine's output lines lack the fields it reads (subfinder `host`, dnsx `host` and `status_code`), it adds an `engine_format` error and counts the lines in `omitted.unparsed`. Neither stops the run. A weekly GitHub Actions job runs the benchmark with the latest engines and commits the bump to `engines.json` and tags a release when it passes, or an issue when it breaks.
+The tested subfinder and dnsx versions are in [`engines.json`](engines.json), built into the binary. When the installed engine is another major version or older than the tested one, raijin-subs adds an `engine_version` error with the install command; when an engine's output lines lack the fields it reads (subfinder `host`, dnsx `host` and `status_code`), it adds an `engine_format` error and counts the lines in `omitted.unparsed`. Neither stops the run. A weekly GitHub Actions job runs the benchmark with the latest engines and commits the bump to `engines.json` and tags a release when it passes, or an issue when it breaks. Before the benchmark it resolves a name that cannot exist (`raijin-drift-<random>.example`) with the same dnsx arguments and requires an `NXDOMAIN` line.
+
+**dnsx 1.3.x drops NXDOMAIN names from its JSON.** Since dnsx v1.3.0 (projectdiscovery/dnsx#988), `-json` writes no line for a name without a record of the requested type, even with `-rcode`, so names that no longer exist lose their status (fix proposed in [projectdiscovery/dnsx#1091](https://github.com/projectdiscovery/dnsx/pull/1091)). raijin-subs pins dnsx 1.2.1 in `engines.json` and warns: dnsx versions in the known-bad range (`KnownBad` in [`engines.go`](engines.go), `>=1.3.0` until a fixed release exists) get an `engine_version` error even though they are newer, and when dnsx writes no line for some of the names it was given (wildcard probes included), those names are still listed (`NOANSWER`) and an `engine_format` error says how many. Install the tested version with `go install github.com/projectdiscovery/dnsx/cmd/dnsx@v1.2.1` or `raijin-mcp update --pinned`.
 
 ## Development
 

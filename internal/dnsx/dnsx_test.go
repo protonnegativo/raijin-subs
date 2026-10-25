@@ -1,6 +1,7 @@
 package dnsx
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -40,5 +41,24 @@ func TestProbeName(t *testing.T) {
 	}
 	if ProbeName("example.com") == n {
 		t.Error("probe names are random")
+	}
+}
+
+func TestMissing(t *testing.T) {
+	recs := []Record{{Host: "a.example.com", StatusCode: "NOERROR"}, {Host: "B.example.com.", StatusCode: "NXDOMAIN"}}
+	if n := Missing([]string{"a.example.com", "b.example.com", "c.example.com", "C.example.com", ""}, recs); n != 1 {
+		t.Errorf("Missing = %d, want 1", n)
+	}
+}
+
+// The drift job's NXDOMAIN check must run dnsx exactly as Run does, or it would test something else.
+func TestDriftJobUsesTheSameArgs(t *testing.T) {
+	b, err := os.ReadFile("../../.github/workflows/engine-drift.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Join(Args("LIST", Options{}), " ")
+	if want := strings.Replace(args, "LIST", `"$RUNNER_TEMP/nx.txt"`, 1); !strings.Contains(string(b), "dnsx "+want+" ") {
+		t.Errorf("engine-drift.yml must run dnsx %s", want)
 	}
 }
