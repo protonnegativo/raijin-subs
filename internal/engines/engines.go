@@ -121,7 +121,7 @@ func Check(ctx context.Context, name, path string) (schema.Error, bool) {
 	if installed == "" || !Untested(installed, e.Version) {
 		return schema.Error{}, false
 	}
-	return schema.Error{Kind: "engine_version", Hint: fmt.Sprintf("%s %s is not the tested %s; results may be incomplete. Install the tested version: %s",
+	return schema.Error{Kind: "engine_version", Hint: fmt.Sprintf("%s %s is not the tested %s; results may be incomplete. Install the tested version: %s, or run raijin-mcp update",
 		name, installed, e.Version, e.Install(e.Version))}, true
 }
 

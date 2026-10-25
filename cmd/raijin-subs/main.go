@@ -27,8 +27,6 @@ import (
 	"github.com/protonnegativo/raijin-subs/internal/subfinder"
 )
 
-const version = "0.1.0"
-
 type multi []string
 
 func (m *multi) String() string     { return strings.Join(*m, ",") }
@@ -74,7 +72,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		banner.Write(stderr, "raijin-subs", version, useColor(stderr))
 	}
 	if *showVersion {
-		fmt.Fprintln(stdout, "raijin-subs", version)
+		fmt.Fprintln(stdout, versionLine())
 		return 0
 	}
 	if *scopeFile == "" {
@@ -182,7 +180,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		})
 		switch {
 		case errors.Is(err, subfinder.ErrNotFound):
-			res.Errors = append(res.Errors, schema.Error{Kind: "missing_engine", Hint: "install subfinder (go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest) or pass --subfinder <path>"})
+			res.Errors = append(res.Errors, schema.Error{Kind: "missing_engine", Hint: "install subfinder (go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest) or pass --subfinder <path>, or run raijin-mcp update"})
 			res.Summary = "subfinder not found, nothing enumerated"
 			res.Raw = ""
 			raw.Close()
@@ -206,7 +204,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			records, stderrTail, err = dnsx.Run(ctx, names, dopt)
 			switch {
 			case errors.Is(err, dnsx.ErrNotFound):
-				res.Errors = append(res.Errors, schema.Error{Kind: "missing_engine", Hint: "install dnsx (go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest) or pass --dnsx <path>; the names below are not resolved"})
+				res.Errors = append(res.Errors, schema.Error{Kind: "missing_engine", Hint: "install dnsx (go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest) or pass --dnsx <path>, or run raijin-mcp update; the names below are not resolved"})
 				opt.Resolved = false
 				code = 2
 			case err != nil:

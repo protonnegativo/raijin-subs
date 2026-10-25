@@ -122,7 +122,7 @@ func (p painter) hud(tool, version string) []string {
 		row("SIGNAL .... "+strings.Repeat("█", 18)+"░░ 90%", cyan),
 		row("NOISE ..... "+strings.Repeat("░", 20)+" ~0", text),
 		row("OUTPUT .... Raijin Schema · JSON", text),
-		row("BUILD ..... "+tool+" v"+version, text),
+		row("BUILD ..... "+tool+" "+release(version), text),
 		p.paint("╰"+strings.Repeat("─", hudWidth)+"╯", frame),
 	}
 }
@@ -161,4 +161,12 @@ func visible(s string) int {
 func mix(a, b rgb, t float64) rgb {
 	t = min(1, max(0, t))
 	return rgb{a.r + int(float64(b.r-a.r)*t), a.g + int(float64(b.g-a.g)*t), a.b + int(float64(b.b-a.b)*t)}
+}
+
+// release writes a bare version number as vX.Y.Z; "v0.1.3" and "dev-..." are left as they are.
+func release(version string) string {
+	if version != "" && version[0] >= '0' && version[0] <= '9' {
+		return "v" + version
+	}
+	return version
 }

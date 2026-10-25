@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/protonnegativo/raijin-subs/internal/engines"
 )
 
 func scopeFile(t *testing.T) string {
@@ -53,7 +56,7 @@ func TestBannerGoesToStderrOnly(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(errb.String(), "TGT-LOCK") || !strings.Contains(errb.String(), "raijin-subs v"+version) {
+	if !strings.Contains(errb.String(), "TGT-LOCK") || !strings.Contains(errb.String(), "raijin-subs "+version) {
 		t.Errorf("banner missing or without the version: %q", errb.String())
 	}
 	if strings.Contains(out.String(), "TGT-LOCK") {
@@ -153,18 +156,34 @@ func TestUsageErrorsExitOne(t *testing.T) {
 	}
 }
 
+// testedVersions is the engine versions in the embedded engines.json, so the fakes answer as the tested
+// engines whatever engines.json says.
+func testedVersions(t *testing.T) map[string]string {
+	t.Helper()
+	m, err := engines.Tested()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := map[string]string{}
+	for n, e := range m {
+		v[n] = e.Version
+	}
+	return v
+}
+
 // fakeEngines writes shell scripts that answer like subfinder and dnsx, so the live path runs offline.
 // The fake dnsx answers 192.0.2.50 for every name under w.example.com, the probe included.
 func fakeEngines(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
+	tested := testedVersions(t)
 	sf := `#!/bin/sh
-[ "$1" = -version ] && { echo "[INF] Current Version: v2.6.7" >&2; exit 0; }
+[ "$1" = -version ] && { echo "[INF] Current Version: v` + tested["subfinder"] + `" >&2; exit 0; }
 for n in www api dev a.w b.w c.w d.w e.w; do echo "{\"host\":\"$n.example.com\",\"input\":\"example.com\",\"sources\":[\"crtsh\"]}"; done
 echo '{"host":"x.example.org","input":"example.com","sources":["crtsh"]}'
 `
 	dx := `#!/bin/sh
-[ "$1" = -version ] && { echo "[INF] Current Version: 1.2.1" >&2; exit 0; }
+[ "$1" = -version ] && { echo "[INF] Current Version: ` + tested["dnsx"] + `" >&2; exit 0; }
 while [ "$1" != "-l" ]; do shift; done
 while read -r n; do
   case "$n" in
@@ -298,7 +317,7 @@ func TestScopeAloneEnumeratesWhatTheScopeNames(t *testing.T) {
 	}
 }
 
-// An older dnsx gets an engine_version warning, and a dnsx that renamed status_code gets an
+// A dnsx of another major version gets an engine_version warning, and a dnsx that renamed status_code gets an
 // engine_format warning with its lines counted in omitted; neither changes the exit code.
 func TestEngineVersionAndFormatWarnings(t *testing.T) {
 	sf, dx := fakeEngines(t)
@@ -306,7 +325,13 @@ func TestEngineVersionAndFormatWarnings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := strings.ReplaceAll(string(b), "Current Version: 1.2.1", "Current Version: 1.1.0")
+	tested := testedVersions(t)["dnsx"]
+	major, err := strconv.Atoi(strings.SplitN(tested, ".", 2)[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	untested := strconv.Itoa(major+1) + ".0.0"
+	body := strings.ReplaceAll(string(b), "Current Version: "+tested, "Current Version: "+untested)
 	body = strings.ReplaceAll(body, `\"status_code\"`, `\"status\"`)
 	if err := os.WriteFile(dx, []byte(body), 0o700); err != nil {
 		t.Fatal(err)
@@ -327,7 +352,7 @@ func TestEngineVersionAndFormatWarnings(t *testing.T) {
 	for _, e := range v.Errors {
 		kinds[e.Kind] = e.Hint
 	}
-	if h := kinds["engine_version"]; !strings.HasPrefix(h, "dnsx 1.1.0 is not the tested 1.2.1") || !strings.Contains(h, "go install github.com/projectdiscovery/dnsx/cmd/dnsx@v1.2.1") {
+	if h := kinds["engine_version"]; !strings.HasPrefix(h, "dnsx "+untested+" is not the tested "+tested) || !strings.Contains(h, "go install github.com/projectdiscovery/dnsx/cmd/dnsx@v"+tested) || !strings.HasSuffix(h, ", or run raijin-mcp update") {
 		t.Errorf("engine_version: %q", h)
 	}
 	if h := kinds["engine_format"]; !strings.HasPrefix(h, "8 of 8 dnsx results had no host and status_code") {
