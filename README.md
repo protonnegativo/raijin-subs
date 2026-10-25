@@ -48,6 +48,7 @@ You also need `subfinder` and `dnsx` on `PATH`, or pass `--subfinder <path>` and
 ## Usage
 
 ```bash
+raijin-subs --scope scope.txt                                        # enumerate every host the scope names
 raijin-subs --scope scope.txt -d example.com
 raijin-subs --scope scope.txt -l roots.txt --max-items 20
 raijin-subs --scope scope.txt -d example.com --no-resolve --sources  # names and sources only, no DNS
@@ -67,6 +68,8 @@ example.com
 ```
 
 A root domain is enumerated when the scope allows it or its subdomains (`*.example.com` covers `example.com`). Roots outside the scope are dropped before subfinder runs, and names outside it are dropped before dnsx resolves them. Both are counted in `omitted.out_of_scope`.
+
+With no `-d`, `-l` or `--input`, raijin-subs enumerates what the scope names: every domain, and the apex of every wildcard (`*.example.com` enumerates `example.com`), once, minus exclusions. IPs and ranges are not root domains, so they are skipped.
 
 `--input` reads subfinder JSONL, subfinder's text output (one name per line), dnsx JSONL, or a file with all of them, like the `raw` file. A replay never runs an engine: names with no dnsx record are `NOANSWER` when the input has dnsx records, `UNCHECKED` when it has none.
 
@@ -172,7 +175,7 @@ The Raijin banner is **off by default**, so normal runs stay small. `--banner` p
 | Flag | Default | |
 |---|---|---|
 | `--scope` | (required) | scope file |
-| `-d` / `-l` / `--input` | | one root domain (repeatable) / root domain file / existing subfinder and dnsx output (repeatable) |
+| `-d` / `-l` / `--input` | every host the scope names | one root domain (repeatable) / root domain file / existing subfinder and dnsx output (repeatable) |
 | `--no-resolve` | false | only enumerate; do not run dnsx |
 | `--sources` | false | write each name's passive sources in its location |
 | `--timeout`, `--max-time` | | subfinder `-timeout` (seconds per source) / `-max-time` (minutes) |

@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"sort"
@@ -39,7 +40,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("raijin-subs", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var domains, inputs multi
-	fs.Var(&domains, "d", "root domain to enumerate (repeatable)")
+	fs.Var(&domains, "d", "root domain to enumerate (repeatable; default: every host the scope names)")
 	list := fs.String("l", "", "file with one root domain per line")
 	scopeFile := fs.String("scope", "", "scope file (required): domains, *.wildcards, IPs, CIDRs, !exclusions")
 	noResolve := fs.Bool("no-resolve", false, "only enumerate; do not resolve the names with dnsx")
@@ -61,7 +62,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print the version")
 	showBanner := fs.Bool("banner", false, "print the Raijin banner to stderr (off by default to keep output small)")
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "usage: raijin-subs --scope scope.txt (-d domain | -l domains.txt | --input results.jsonl) [flags] [-- extra subfinder args]\n\n")
+		fmt.Fprintf(stderr, "usage: raijin-subs --scope scope.txt [-d domain | -l domains.txt | --input results.jsonl] [flags] [-- extra subfinder args]\n\nWith no targets it enumerates every host the scope names.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -131,6 +132,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 				return 1
 			}
 			domains = append(domains, lines...)
+		}
+		if len(domains) == 0 {
+			// no targets given: enumerate the domains the scope names, and the apex of each wildcard.
+			// IPs and ranges are not root domains.
+			targets, wildcards, _ := sc.Targets()
+			for _, t := range targets {
+				if net.ParseIP(t) == nil {
+					domains = append(domains, t)
+				}
+			}
+			for _, w := range wildcards {
+				domains = append(domains, strings.TrimPrefix(w, "*."))
+			}
 		}
 		roots := filter(domains, sc, res.Omitted)
 		if len(roots) == 0 {
