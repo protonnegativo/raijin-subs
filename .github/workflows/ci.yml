@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: test -z "$(gofmt -l .)"
+      - run: go test ./...
+      - name: Offline benchmark replay
+        run: |
+          pip install tiktoken
+          PY=python3 bench/run.sh "$RUNNER_TEMP/bench" 2>&1 | tee bench.log
+          n=$(grep -c 'missing from output' bench.log || true)
+          ok=$(grep -c ' 0 missing from output' bench.log || true)
+          if [ "$n" != 3 ] || [ "$ok" != 3 ]; then
+            echo "verify reported missing results"; grep -A5 'missing from output' bench.log; exit 1
+          fi

@@ -1,0 +1,113 @@
+name: Engine drift
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      subfinder:
+        description: subfinder version to test (latest or vX.Y.Z)
+        default: latest
+      dnsx:
+        description: dnsx version to test (latest or vX.Y.Z)
+        default: latest
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install the engines
+        env:
+          SUBFINDER_VERSION: ${{ inputs.subfinder || 'latest' }}
+          DNSX_VERSION: ${{ inputs.dnsx || 'latest' }}
+        run: |
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          go install "$(jq -r .subfinder.go engines.json)@$SUBFINDER_VERSION"
+          go install "$(jq -r .dnsx.go engines.json)@$DNSX_VERSION"
+      - name: Print the installed versions
+        id: versions
+        run: |
+          sf=$(subfinder -version -duc 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          dx=$(dnsx -version -duc 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          echo "subfinder $sf, dnsx $dx"
+          echo "subfinder=$sf" >> "$GITHUB_OUTPUT"
+          echo "dnsx=$dx" >> "$GITHUB_OUTPUT"
+      - run: pip install tiktoken
+      - name: LIVE benchmark
+        id: bench
+        run: |
+          set +e
+          LIVE=1 PY=python3 bench/run.sh "$RUNNER_TEMP/live" > bench.log 2>&1
+          status=$?
+          cat bench.log
+          grep 'missing from output\|MISSING' bench.log > verify.txt
+          grep -l '"kind":"engine_format"' "$RUNNER_TEMP"/live/*.live.json >> verify.txt 2>/dev/null && echo "engine_format error in the live run" >> verify.txt
+          n=$(grep -c 'missing from output' verify.txt)
+          ok=$(grep -c ' 0 missing from output' verify.txt)
+          if [ "$status" != 0 ] || [ "$n" != 3 ] || [ "$ok" != 3 ] || grep -q engine_format verify.txt; then
+            echo "bench exit $status" >> verify.txt
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-bench
+          path: ${{ runner.temp }}/live
+          retention-days: 14
+      - name: Open or update the drift issue
+        if: failure()
+        env:
+          SF: ${{ steps.versions.outputs.subfinder }}
+          DX: ${{ steps.versions.outputs.dnsx }}
+        run: |
+          gh label create engine-drift --color B60205 --description "An engine update breaks raijin-subs" 2>/dev/null || true
+          { echo "subfinder $SF, dnsx $DX"; echo; echo '```'; cat verify.txt 2>/dev/null; echo '```'; echo; echo "$RUN_URL"; } > body.md
+          existing=$(gh issue list --label engine-drift --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "Engine drift: subfinder $SF, dnsx $DX" --label engine-drift --body-file body.md
+          fi
+      - name: Open or update the bump PR
+        if: success()
+        env:
+          SF: ${{ steps.versions.outputs.subfinder }}
+          DX: ${{ steps.versions.outputs.dnsx }}
+        run: |
+          old_sf=$(jq -r .subfinder.version engines.json)
+          old_dx=$(jq -r .dnsx.version engines.json)
+          newer() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]; }
+          names=(); lines=()
+          if newer "$SF" "$old_sf"; then names+=("subfinder $SF"); lines+=("- subfinder $old_sf -> $SF"); else SF=$old_sf; fi
+          if newer "$DX" "$old_dx"; then names+=("dnsx $DX"); lines+=("- dnsx $old_dx -> $DX"); else DX=$old_dx; fi
+          if [ ${#names[@]} = 0 ]; then echo "engines.json is up to date"; exit 0; fi
+          git checkout -- bench
+          jq --arg sf "$SF" --arg dx "$DX" '.subfinder.version=$sf | .dnsx.version=$dx' engines.json > engines.tmp
+          python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); print("{\n" + ",\n".join("  %s: %s" % (json.dumps(k), json.dumps(v)) for k, v in m.items()) + "\n}")' engines.tmp > engines.json
+          rm engines.tmp
+          title="Test with $(IFS=,; echo "${names[*]}" | sed 's/,/, /g')"
+          branch="engine-bump/$(echo "${names[*]}" | tr ' ' '-')"
+          { printf '%s\n' "${lines[@]}"; echo; echo '```'; cat verify.txt; echo '```'; echo; echo "LIVE run: $RUN_URL"; } > body.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git commit -m "$title" engines.json
+          git push -f origin "$branch"
+          if gh pr view "$branch" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$branch" --title "$title" --body-file body.md
+          else
+            gh pr create --head "$branch" --title "$title" --body-file body.md
+          fi
