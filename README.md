@@ -43,7 +43,11 @@ Against the engines' text output (`subfinder -silent` and `dnsx -a -aaaa -cname 
 go install github.com/protonnegativo/raijin-subs/cmd/raijin-subs@latest
 ```
 
+That installs the latest release.
+
 You also need `subfinder` and `dnsx` on `PATH`, or pass `--subfinder <path>` and `--dnsx <path>`.
+
+**Versions.** Releases are tagged automatically on every change and every passing engine update. `raijin-subs --version` shows the release and the tested engine versions (`raijin-subs v0.1.3 (tested with dnsx 1.2.1, subfinder 2.6.7)`). `raijin-mcp update` updates every Raijin tool at once.
 
 ## Usage
 
@@ -191,7 +195,7 @@ The Raijin banner is **off by default**, so normal runs stay small. `--banner` p
 
 ## Engine versions
 
-The tested subfinder and dnsx versions are in [`engines.json`](engines.json), built into the binary. When the installed engine is another major version or older than the tested one, raijin-subs adds an `engine_version` error with the install command; when an engine's output lines lack the fields it reads (subfinder `host`, dnsx `host` and `status_code`), it adds an `engine_format` error and counts the lines in `omitted.unparsed`. Neither stops the run. A weekly GitHub Actions job runs the benchmark with the latest engines and opens a PR to bump `engines.json` when it passes, or an issue when it breaks.
+The tested subfinder and dnsx versions are in [`engines.json`](engines.json), built into the binary. When the installed engine is another major version or older than the tested one, raijin-subs adds an `engine_version` error with the install command; when an engine's output lines lack the fields it reads (subfinder `host`, dnsx `host` and `status_code`), it adds an `engine_format` error and counts the lines in `omitted.unparsed`. Neither stops the run. A weekly GitHub Actions job runs the benchmark with the latest engines and commits the bump to `engines.json` and tags a release when it passes, or an issue when it breaks.
 
 ## Development
 
