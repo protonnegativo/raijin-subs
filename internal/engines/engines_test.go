@@ -1,6 +1,11 @@
 package engines
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	raijinsubs "github.com/protonnegativo/raijin-subs"
+)
 
 func TestTestedHasEveryEngine(t *testing.T) {
 	m, err := Tested()
@@ -88,6 +93,24 @@ func TestTestedIsNotKnownBad(t *testing.T) {
 	for name, e := range m {
 		if b, bad := KnownBad(name, e.Version); bad {
 			t.Errorf("engines.json tests %s %s, which KnownBad lists as %s; if it is fixed, close the range in engines.go", name, e.Version, b.Range)
+		}
+	}
+}
+
+// raijin-mcp update reads "below" from engines.json, the tools read KnownBad: an open range ">=X" is
+// "below": "X", and a bound is only set for a known-bad range.
+func TestBelowMatchesKnownBad(t *testing.T) {
+	m, err := Tested()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, e := range m {
+		want := ""
+		if b, ok := raijinsubs.KnownBad[name]; ok && strings.HasPrefix(b.Range, ">=") && !strings.Contains(b.Range, ",") {
+			want = strings.TrimPrefix(b.Range, ">=")
+		}
+		if e.Below != want {
+			t.Errorf("engines.json %s below %q, want %q from KnownBad", name, e.Below, want)
 		}
 	}
 }
