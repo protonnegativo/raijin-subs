@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/protonnegativo/raijin-core/scope"
 	"github.com/protonnegativo/raijin-subs/internal/dnsx"
 	"github.com/protonnegativo/raijin-subs/internal/schema"
-	"github.com/protonnegativo/raijin-core/scope"
 	"github.com/protonnegativo/raijin-subs/internal/subfinder"
 )
 
