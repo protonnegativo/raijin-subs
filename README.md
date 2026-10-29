@@ -18,17 +18,17 @@ Here are the same names, with the same records, read by an agent (tokens, `o200k
 
 ```
 Noisy: hackerone.com, 510 names, 498 that do not resolve
-  raijin-subs     ▊                       4,810 tokens
+  raijin-subs     ▊                       4,820 tokens
   engines text    ▉                       5,567 tokens
   engines JSON    ████████████████████  128,845 tokens
 
 Findings: gitlab.com, 830 names, 29 findings, 602 NXDOMAIN
-  raijin-subs     █▏                     17,063 tokens
+  raijin-subs     █▏                     17,073 tokens
   engines text    █▍                     20,999 tokens
   engines JSON    ████████████████████  294,874 tokens
 
 Wildcard: shopify.com, 549 names, 506 behind *.shopify.com
-  raijin-subs     █                       4,500 tokens
+  raijin-subs     █                       4,510 tokens
   engines text    ████▊                  22,741 tokens
   engines JSON    ████████████████████   95,998 tokens
 ```
@@ -41,7 +41,7 @@ raijin-subs reads **17× to 27×** fewer tokens than the engines' JSON (`subfind
 - **Output is bounded.** On a huge run, `--max-bytes` cuts the least important data first (names that do not resolve) and counts every cut.
 - **Details are one file away.** Both engines' full JSONL is saved to disk, and its path is in `raw`. It holds the sources, TTLs, resolvers and SOA records, costs no tokens until the agent opens it, and replays with `--input`.
 
-Against the engines' text output (`subfinder -silent` and `dnsx -a -aaaa -cname -resp -silent`), the gap is small when most names are different: **1.2×** on the noisy and the findings runs. It is **5.1×** on the wildcard run. The text output also has no grouping, no ranking, no status for names that do not resolve, and no field names. Full method and numbers are in [BENCHMARK.md](BENCHMARK.md), and `bench/run.sh` reproduces them.
+Against the engines' text output (`subfinder -silent` and `dnsx -a -aaaa -cname -resp -silent`), the gap is small when most names are different: **1.2×** on the noisy and the findings runs. It is **5.0×** on the wildcard run. The text output also has no grouping, no ranking, no status for names that do not resolve, and no field names. Full method and numbers are in [BENCHMARK.md](BENCHMARK.md), and `bench/run.sh` reproduces them.
 
 ## Install
 
