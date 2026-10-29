@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,13 +16,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/protonnegativo/raijin-core/scope"
+	"github.com/protonnegativo/raijin-core/state"
 	"github.com/protonnegativo/raijin-subs/internal/banner"
 	"github.com/protonnegativo/raijin-subs/internal/dnsx"
 	"github.com/protonnegativo/raijin-subs/internal/engines"
 	"github.com/protonnegativo/raijin-subs/internal/reduce"
 	"github.com/protonnegativo/raijin-subs/internal/schema"
-	"github.com/protonnegativo/raijin-subs/internal/scope"
-	"github.com/protonnegativo/raijin-subs/internal/state"
 	"github.com/protonnegativo/raijin-subs/internal/subfinder"
 )
 
@@ -79,12 +78,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "raijin-subs: --scope is required")
 		return 1
 	}
-	sc, err := scope.Load(*scopeFile)
-	if err != nil {
-		fmt.Fprintln(stderr, "raijin-subs: scope:", err)
-		return 1
-	}
-
 	res := schema.Result{
 		Tool:     "raijin-subs",
 		Version:  version,
@@ -94,6 +87,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		Errors:   []schema.Error{},
 		Next:     []string{},
 		Budget:   schema.Budget{MaxItems: *maxItems, MaxBytes: *maxBytes},
+	}
+	sc, err := scope.Load(*scopeFile)
+	if err != nil {
+		// An invalid scope is an error the caller can fix: say which lines and stop before any engine runs.
+		res.Errors = append(res.Errors, scope.SchemaErrors(err)...)
+		res.Summary = "invalid scope file, nothing scanned"
+		write(stdout, &res, *format, *pretty)
+		return 1
 	}
 	opt := reduce.Defaults()
 	opt.MaxItems = *maxItems
@@ -259,7 +260,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			res.Errors = append(res.Errors, schema.Error{Kind: "state_error", Hint: err.Error()})
 		} else {
-			newCount = st.Mark(res.Findings, allLocations)
+			newCount = state.Mark(st, res.Findings, allLocations,
+				func(f *schema.Finding) string { return f.Fingerprint },
+				func(f *schema.Finding) { f.New = true })
 			if err := st.Save(*statePath); err != nil {
 				res.Errors = append(res.Errors, schema.Error{Kind: "state_error", Hint: err.Error()})
 			}
@@ -437,12 +440,7 @@ func write(w io.Writer, res *schema.Result, format string, pretty bool) {
 		}
 		return
 	}
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(false)
-	if pretty {
-		enc.SetIndent("", "  ")
-	}
-	_ = enc.Encode(res)
+	_ = schema.Write(w, res, pretty)
 }
 
 // describe is a one-line view of an answer for the table: the status, or the CNAME target and IPs.
