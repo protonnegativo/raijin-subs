@@ -89,6 +89,7 @@ With no `-d`, `-l` or `--input`, raijin-subs enumerates what the scope names: ev
 
 ```json
 {
+  "schema_version": 1,
   "tool": "raijin-subs",
   "version": "0.1.0",
   "target": "bench/fixtures/noisy/raw.jsonl",
@@ -167,6 +168,9 @@ What the reducer does:
 
   Every cut is counted in `omitted`, `budget.truncated` is set, and `next` points to the raw file. `--max-items` caps the number of findings (0, the default, keeps all).
 - **Errors** say what to try next. If subfinder is missing, nothing runs and the exit code is 2. If dnsx is missing, every name is still listed as `UNCHECKED`, with the hint in `errors`, and the exit code is 2.
+- **`schema_version`** is the first field of the JSON (currently `1`). It changes only when a field is removed or changes meaning.
+- **Invalid scope.** A scope file with a bad line (a port, a CIDR with host bits set, no include rules...) stops the run before any engine starts. `errors` has one entry per bad line with `kind: "scope"`, and its `hint` says the line number, the reason and the fix.
+- **Exit codes.** `0` ok. `2` structured error with the JSON on stdout (`kind: "scope"`, `missing_engine`), so an agent can tell them apart by `kind`. `1` wrong usage (unknown flag, missing `--scope`, no root domain in scope).
 
 Fields an agent can rebuild are left out to save tokens:
 
@@ -212,7 +216,7 @@ go test ./...
 go vet ./...
 ```
 
-Standard library only. subfinder runs as a subprocess with `-json -cs -silent -nc -duc`, and dnsx with `-a -aaaa -resp -json -silent -nc -duc -omit-raw -rcode noerror,formerr,servfail,nxdomain,notimp,refused`, so the binary stays small and the engines can be updated on their own. `-rcode` with every status makes dnsx write a line for the names that do not resolve too. There is no `-cname`, on purpose: the A and AAAA answers already carry the chain, which dnsx writes in `cname`, and with `-cname` dnsx v1.2.1 also sends a CNAME query whose NOERROR replaces the A query's NXDOMAIN, so a dangling CNAME would never be reported as `dangling`. The CLI tests run the live path offline with small fake engines; `testdata/sample.jsonl` is a synthetic run that hits every rule.
+The only Go dependency is [raijin-core](https://github.com/protonnegativo/raijin-core) (scope, schema envelope, state), shared by the Raijin tools. subfinder runs as a subprocess with `-json -cs -silent -nc -duc`, and dnsx with `-a -aaaa -resp -json -silent -nc -duc -omit-raw -rcode noerror,formerr,servfail,nxdomain,notimp,refused`, so the binary stays small and the engines can be updated on their own. `-rcode` with every status makes dnsx write a line for the names that do not resolve too. There is no `-cname`, on purpose: the A and AAAA answers already carry the chain, which dnsx writes in `cname`, and with `-cname` dnsx v1.2.1 also sends a CNAME query whose NOERROR replaces the A query's NXDOMAIN, so a dangling CNAME would never be reported as `dangling`. The CLI tests run the live path offline with small fake engines; `testdata/sample.jsonl` is a synthetic run that hits every rule.
 
 ## Responsible use
 
