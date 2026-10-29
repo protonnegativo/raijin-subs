@@ -170,7 +170,7 @@ What the reducer does:
 - **Errors** say what to try next. If subfinder is missing, nothing runs and the exit code is 2. If dnsx is missing, every name is still listed as `UNCHECKED`, with the hint in `errors`, and the exit code is 2.
 - **`schema_version`** is the first field of the JSON (currently `1`). It changes only when a field is removed or changes meaning.
 - **Invalid scope.** A scope file with a bad line (a port, a CIDR with host bits set, no include rules...) stops the run before any engine starts. `errors` has one entry per bad line with `kind: "scope"`, and its `hint` says the line number, the reason and the fix.
-- **Exit codes.** `0` ok. `2` structured error with the JSON on stdout (`kind: "scope"`, `missing_engine`), so an agent can tell them apart by `kind`. `1` wrong usage (unknown flag, missing `--scope`, no root domain in scope).
+- **Exit codes.** `0` ok. `2` structured error with the JSON on stdout (`kind: "scope"`, `no_targets`, `missing_engine`), so an agent can tell them apart by `kind`. `1` wrong usage (unknown flag, missing `--scope`), with nothing on stdout.
 
 Fields an agent can rebuild are left out to save tokens:
 

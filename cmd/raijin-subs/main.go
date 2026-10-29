@@ -149,8 +149,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		roots := filter(domains, sc, res.Omitted)
 		if len(roots) == 0 {
-			fmt.Fprintln(stderr, "raijin-subs: no root domains in scope")
-			return 1
+			res.Errors = append(res.Errors, schema.Error{Kind: "no_targets", Hint: "no root domain is both requested and in scope: pass -d or -l with a domain the scope allows, or add the domain to the scope file"})
+			res.Summary = "no root domains in scope, nothing enumerated"
+			write(stdout, &res, *format, *pretty)
+			return 2
 		}
 		res.Target = targetSummary(roots, res.Omitted["out_of_scope"])
 

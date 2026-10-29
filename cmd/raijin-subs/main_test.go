@@ -148,11 +148,26 @@ func TestUsageErrorsExitOne(t *testing.T) {
 	if code := run([]string{"--input", "../../testdata/sample.jsonl"}, &out, &errb); code != 1 {
 		t.Errorf("no --scope: exit %d, want 1", code)
 	}
-	if code := run([]string{"--scope", scopeFile(t), "-d", "example.org"}, &out, &errb); code != 1 {
-		t.Errorf("no root in scope: exit %d, want 1", code)
-	}
 	if code := run([]string{"--scope", scopeFile(t), "--nope"}, &out, &errb); code != 1 {
 		t.Errorf("unknown flag: exit %d, want 1", code)
+	}
+	if out.Len() != 0 {
+		t.Errorf("usage errors must leave stdout empty: %s", out.String())
+	}
+}
+
+func TestNoTargetsExitsTwoWithJSON(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := run([]string{"--scope", scopeFile(t), "-d", "example.org"}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if !strings.HasPrefix(out.String(), `{"schema_version":1,`) {
+		t.Errorf("stdout must be the JSON result: %s", out.String())
+	}
+	var v output
+	if err := json.Unmarshal(out.Bytes(), &v); err != nil || len(v.Errors) != 1 || v.Errors[0].Kind != "no_targets" || v.Errors[0].Hint == "" {
+		t.Errorf("stdout = %s", out.String())
 	}
 }
 
