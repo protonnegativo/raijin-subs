@@ -442,8 +442,8 @@ func TestInvalidScopeIsStructuredAndStopsBeforeAnyEngine(t *testing.T) {
 			}
 			var out, errb bytes.Buffer
 			code := run([]string{"--scope", p, "-d", "example.com", "--subfinder", "/nonexistent/subfinder", "--dnsx", "/nonexistent/dnsx"}, &out, &errb)
-			if code == 0 {
-				t.Fatalf("exit 0 for an invalid scope: %s", out.String())
+			if code != 2 {
+				t.Fatalf("exit %d for an invalid scope, want 2: %s", code, out.String())
 			}
 			if !strings.HasPrefix(out.String(), `{"schema_version":1,"tool":"raijin-subs",`) {
 				t.Errorf("stdout must be the JSON result: %s", out.String())
@@ -481,8 +481,8 @@ func TestInvalidScopeInTableFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errb bytes.Buffer
-	if code := run([]string{"--scope", p, "--format", "table", "--input", "../../testdata/sample.jsonl"}, &out, &errb); code == 0 {
-		t.Fatal("exit 0")
+	if code := run([]string{"--scope", p, "--format", "table", "--input", "../../testdata/sample.jsonl"}, &out, &errb); code != 2 {
+		t.Fatalf("exit %d, want 2", code)
 	}
 	if !strings.Contains(out.String(), "error    scope: line 1: port in rule") {
 		t.Errorf("table: %s", out.String())
