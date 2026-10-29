@@ -1,5 +1,11 @@
 # ⚡ Raijin Subs
 
+[![CI](https://github.com/protonnegativo/raijin-subs/actions/workflows/ci.yml/badge.svg)](https://github.com/protonnegativo/raijin-subs/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/protonnegativo/raijin-subs)](https://github.com/protonnegativo/raijin-subs/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/protonnegativo/raijin-subs)](LICENSE)
+[![Go Reference](https://pkg.go.dev/badge/github.com/protonnegativo/raijin-subs.svg)](https://pkg.go.dev/github.com/protonnegativo/raijin-subs)
+[![Go Report Card](https://goreportcard.com/badge/github.com/protonnegativo/raijin-subs)](https://goreportcard.com/report/github.com/protonnegativo/raijin-subs)
+
 **subfinder + dnsx for AI agents: every subdomain with its DNS answer, names that share an answer collapsed, dangling CNAMEs and internal IPs ranked first.**
 
 `raijin-subs` is a tool of **Raijin**, an arsenal of offensive security tools built for AI agents. It runs [subfinder](https://github.com/projectdiscovery/subfinder) for passive enumeration and [dnsx](https://github.com/projectdiscovery/dnsx) to resolve every name, and returns the **Raijin Schema**: one compact JSON where names with the same answer share one entry, dangling CNAMEs, private IPs, third-party services and names like `staging` or `vpn` are ranked findings, wildcard DNS is detected and labelled, and anything it had to cut is counted.
