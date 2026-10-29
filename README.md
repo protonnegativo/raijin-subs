@@ -1,5 +1,11 @@
 # ⚡ Raijin Subs
 
+[![CI](https://github.com/protonnegativo/raijin-subs/actions/workflows/ci.yml/badge.svg)](https://github.com/protonnegativo/raijin-subs/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/protonnegativo/raijin-subs)](https://github.com/protonnegativo/raijin-subs/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/protonnegativo/raijin-subs)](LICENSE)
+[![Go Reference](https://pkg.go.dev/badge/github.com/protonnegativo/raijin-subs.svg)](https://pkg.go.dev/github.com/protonnegativo/raijin-subs)
+[![Go Report Card](https://goreportcard.com/badge/github.com/protonnegativo/raijin-subs)](https://goreportcard.com/report/github.com/protonnegativo/raijin-subs)
+
 **subfinder + dnsx for AI agents: every subdomain with its DNS answer, names that share an answer collapsed, dangling CNAMEs and internal IPs ranked first.**
 
 `raijin-subs` is a tool of **Raijin**, an arsenal of offensive security tools built for AI agents. It runs [subfinder](https://github.com/projectdiscovery/subfinder) for passive enumeration and [dnsx](https://github.com/projectdiscovery/dnsx) to resolve every name, and returns the **Raijin Schema**: one compact JSON where names with the same answer share one entry, dangling CNAMEs, private IPs, third-party services and names like `staging` or `vpn` are ranked findings, wildcard DNS is detected and labelled, and anything it had to cut is counted.
@@ -12,17 +18,17 @@ Here are the same names, with the same records, read by an agent (tokens, `o200k
 
 ```
 Noisy: hackerone.com, 510 names, 498 that do not resolve
-  raijin-subs     ▊                       4,810 tokens
+  raijin-subs     ▊                       4,820 tokens
   engines text    ▉                       5,567 tokens
   engines JSON    ████████████████████  128,845 tokens
 
 Findings: gitlab.com, 830 names, 29 findings, 602 NXDOMAIN
-  raijin-subs     █▏                     17,063 tokens
+  raijin-subs     █▏                     17,073 tokens
   engines text    █▍                     20,999 tokens
   engines JSON    ████████████████████  294,874 tokens
 
 Wildcard: shopify.com, 549 names, 506 behind *.shopify.com
-  raijin-subs     █                       4,500 tokens
+  raijin-subs     █                       4,510 tokens
   engines text    ████▊                  22,741 tokens
   engines JSON    ████████████████████   95,998 tokens
 ```
@@ -35,7 +41,7 @@ raijin-subs reads **17× to 27×** fewer tokens than the engines' JSON (`subfind
 - **Output is bounded.** On a huge run, `--max-bytes` cuts the least important data first (names that do not resolve) and counts every cut.
 - **Details are one file away.** Both engines' full JSONL is saved to disk, and its path is in `raw`. It holds the sources, TTLs, resolvers and SOA records, costs no tokens until the agent opens it, and replays with `--input`.
 
-Against the engines' text output (`subfinder -silent` and `dnsx -a -aaaa -cname -resp -silent`), the gap is small when most names are different: **1.2×** on the noisy and the findings runs. It is **5.1×** on the wildcard run. The text output also has no grouping, no ranking, no status for names that do not resolve, and no field names. Full method and numbers are in [BENCHMARK.md](BENCHMARK.md), and `bench/run.sh` reproduces them.
+Against the engines' text output (`subfinder -silent` and `dnsx -a -aaaa -cname -resp -silent`), the gap is small when most names are different: **1.2×** on the noisy and the findings runs. It is **5.0×** on the wildcard run. The text output also has no grouping, no ranking, no status for names that do not resolve, and no field names. Full method and numbers are in [BENCHMARK.md](BENCHMARK.md), and `bench/run.sh` reproduces them.
 
 ## Install
 
@@ -83,6 +89,7 @@ With no `-d`, `-l` or `--input`, raijin-subs enumerates what the scope names: ev
 
 ```json
 {
+  "schema_version": 1,
   "tool": "raijin-subs",
   "version": "0.1.0",
   "target": "bench/fixtures/noisy/raw.jsonl",
@@ -161,6 +168,9 @@ What the reducer does:
 
   Every cut is counted in `omitted`, `budget.truncated` is set, and `next` points to the raw file. `--max-items` caps the number of findings (0, the default, keeps all).
 - **Errors** say what to try next. If subfinder is missing, nothing runs and the exit code is 2. If dnsx is missing, every name is still listed as `UNCHECKED`, with the hint in `errors`, and the exit code is 2.
+- **`schema_version`** is the first field of the JSON (currently `1`). It changes only when a field is removed or changes meaning.
+- **Invalid scope.** A scope file with a bad line (a port, a CIDR with host bits set, no include rules...) stops the run before any engine starts. `errors` has one entry per bad line with `kind: "scope"`, and its `hint` says the line number, the reason and the fix.
+- **Exit codes.** `0` ok. `2` structured error with the JSON on stdout (`kind: "scope"`, `no_targets`, `missing_engine`), so an agent can tell them apart by `kind`. `1` wrong usage (unknown flag, missing `--scope`), with nothing on stdout.
 
 Fields an agent can rebuild are left out to save tokens:
 
@@ -206,7 +216,7 @@ go test ./...
 go vet ./...
 ```
 
-Standard library only. subfinder runs as a subprocess with `-json -cs -silent -nc -duc`, and dnsx with `-a -aaaa -resp -json -silent -nc -duc -omit-raw -rcode noerror,formerr,servfail,nxdomain,notimp,refused`, so the binary stays small and the engines can be updated on their own. `-rcode` with every status makes dnsx write a line for the names that do not resolve too. There is no `-cname`, on purpose: the A and AAAA answers already carry the chain, which dnsx writes in `cname`, and with `-cname` dnsx v1.2.1 also sends a CNAME query whose NOERROR replaces the A query's NXDOMAIN, so a dangling CNAME would never be reported as `dangling`. The CLI tests run the live path offline with small fake engines; `testdata/sample.jsonl` is a synthetic run that hits every rule.
+The only Go dependency is [raijin-core](https://github.com/protonnegativo/raijin-core) (scope, schema envelope, state), shared by the Raijin tools. subfinder runs as a subprocess with `-json -cs -silent -nc -duc`, and dnsx with `-a -aaaa -resp -json -silent -nc -duc -omit-raw -rcode noerror,formerr,servfail,nxdomain,notimp,refused`, so the binary stays small and the engines can be updated on their own. `-rcode` with every status makes dnsx write a line for the names that do not resolve too. There is no `-cname`, on purpose: the A and AAAA answers already carry the chain, which dnsx writes in `cname`, and with `-cname` dnsx v1.2.1 also sends a CNAME query whose NOERROR replaces the A query's NXDOMAIN, so a dangling CNAME would never be reported as `dangling`. The CLI tests run the live path offline with small fake engines; `testdata/sample.jsonl` is a synthetic run that hits every rule.
 
 ## Responsible use
 

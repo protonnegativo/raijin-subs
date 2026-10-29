@@ -43,3 +43,15 @@ func TestVersionFlag(t *testing.T) {
 		t.Errorf("--version format: %q", out.String())
 	}
 }
+
+func TestReleaseVersionWinsOverBuildInfo(t *testing.T) {
+	old := releaseVersion
+	t.Cleanup(func() { releaseVersion = old })
+	releaseVersion = "v9.9.9"
+	if got := buildVersion(&debug.BuildInfo{Main: debug.Module{Version: "v1.0.0"}}, true); got != "v9.9.9" {
+		t.Errorf("buildVersion = %q, want v9.9.9", got)
+	}
+	if got := buildVersion(nil, false); got != "v9.9.9" {
+		t.Errorf("buildVersion without build info = %q, want v9.9.9", got)
+	}
+}

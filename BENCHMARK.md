@@ -24,8 +24,8 @@ Reproduce from the saved engine output: `bench/run.sh`. Re-enumerate and refresh
 |---|---:|---:|---:|
 | subfinder `-json -cs` + dnsx `-json -omit-raw` | 377,344 | 128,845 | 1× |
 | subfinder text + dnsx text | 14,310 | 5,567 | 23× |
-| **raijin-subs JSON (default)** | 13,892 | **4,810** | **27×** |
-| raijin-subs `--pretty` | 19,648 | 6,166 | 21× |
+| **raijin-subs JSON (default)** | 13,922 | **4,820** | **27×** |
+| raijin-subs `--pretty` | 19,682 | 6,179 | 21× |
 | raijin-subs `--format table` | 725 | 264 | 488× |
 
 ## Scenario 2: findings (gitlab.com)
@@ -36,8 +36,8 @@ Reproduce from the saved engine output: `bench/run.sh`. Re-enumerate and refresh
 |---|---:|---:|---:|
 | subfinder `-json -cs` + dnsx `-json -omit-raw` | 891,477 | 294,874 | 1× |
 | subfinder text + dnsx text | 55,784 | 20,999 | 14× |
-| **raijin-subs JSON (default)** | 49,713 | **17,063** | **17×** |
-| raijin-subs `--pretty` | 66,801 | 21,445 | 14× |
+| **raijin-subs JSON (default)** | 49,743 | **17,073** | **17×** |
+| raijin-subs `--pretty` | 66,835 | 21,458 | 14× |
 | raijin-subs `--format table` | 6,611 | 2,435 | 121× |
 
 ## Scenario 3: wildcard (shopify.com)
@@ -48,8 +48,8 @@ Reproduce from the saved engine output: `bench/run.sh`. Re-enumerate and refresh
 |---|---:|---:|---:|
 | subfinder `-json -cs` + dnsx `-json -omit-raw` | 276,155 | 95,998 | 1× |
 | subfinder text + dnsx text | 57,732 | 22,741 | 4.2× |
-| **raijin-subs JSON (default)** | 14,398 | **4,500** | **21×** |
-| raijin-subs `--pretty` | 20,323 | 5,892 | 16× |
+| **raijin-subs JSON (default)** | 14,428 | **4,510** | **21×** |
+| raijin-subs `--pretty` | 20,357 | 5,905 | 16× |
 | raijin-subs `--format table` | 655 | 241 | 398× |
 
 In every scenario the raijin-subs JSON includes about 10 tokens for `target`, the path of the replayed fixture. A live run writes the domain there and adds about 18 tokens for `raw`.
@@ -75,9 +75,9 @@ What the JSON leaves out stays in `raw`, which raijin-subs saves to disk: the pa
 
 - **Against the engines' JSON**, the structured output an agent would parse, raijin-subs uses **17× to 27× fewer tokens** for the same names and records. Most of the JSON is dnsx repeating its resolvers, TTL, timestamp and the zone's SOA record on every line, and subfinder repeating the root and the sources.
 - **Against the engines' text output**, the gap depends on the run:
-  - noisy: **1.16× smaller** (5,567 → 4,810);
-  - findings: **1.23× smaller** (20,999 → 17,063);
-  - wildcard: **5.1× smaller** (22,741 → 4,500).
+  - noisy: **1.15× smaller** (5,567 → 4,820);
+  - findings: **1.23× smaller** (20,999 → 17,073);
+  - wildcard: **5.0× smaller** (22,741 → 4,510).
 
   When most names are different, the cost is the names themselves, and both outputs list every name once. raijin-subs writes each IP once per group instead of once per name and record type, which is where the wildcard run saves the most: dnsx's text has one line per record for each of the 506 wildcard names. In exchange the agent gets the status of the 498 or 700 names that do not resolve (dnsx's text has no line for them), the CNAME chain with its provider, the wildcard label, and the leads ranked first.
 - **The output stays bounded.** On a run too big for `--max-bytes`, raijin-subs cuts the least important data first: names that do not resolve, then other group names, then groups, then extra names of low-ranked findings, then low-ranked findings. Every cut is counted in `omitted`, and `next` points to the raw file. The engines' output has no upper bound.
@@ -89,6 +89,7 @@ o200k tokens, on the same fixtures:
 | Version | Scenario 1 | Scenario 2 | Scenario 3 | Lossless? |
 |---|---:|---:|---:|---|
 | `no-address` also on names behind a wildcard | 4,810 | 17,063 | 4,528 | yes |
-| **no `no-address` behind a wildcard** (current) | **4,810** | **17,063** | **4,500** | **yes** |
+| no `no-address` behind a wildcard | 4,810 | 17,063 | 4,500 | yes |
+| **`schema_version` in the output** (current) | **4,820** | **17,073** | **4,510** | **yes** |
 
 Before the benchmark runs, two changes were made on a first live sample of the same domains: CNAMEs to CDNs and load balancers (CloudFront, Cloudflare, Akamai, Fastly, AWS ELB) stopped being `third-party` findings, since they front the owner's own origin (on gitlab.com this turned 13 low findings into groups), and the registered domain's own name stopped counting as an interesting word (`gitlab` under gitlab.com). In the first version 6 shopify.com names that answered with the wildcard CNAME but no address (a flaky query) were `no-address` findings; they are now part of the wildcard group.

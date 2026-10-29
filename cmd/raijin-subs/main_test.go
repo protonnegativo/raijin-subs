@@ -148,11 +148,26 @@ func TestUsageErrorsExitOne(t *testing.T) {
 	if code := run([]string{"--input", "../../testdata/sample.jsonl"}, &out, &errb); code != 1 {
 		t.Errorf("no --scope: exit %d, want 1", code)
 	}
-	if code := run([]string{"--scope", scopeFile(t), "-d", "example.org"}, &out, &errb); code != 1 {
-		t.Errorf("no root in scope: exit %d, want 1", code)
-	}
 	if code := run([]string{"--scope", scopeFile(t), "--nope"}, &out, &errb); code != 1 {
 		t.Errorf("unknown flag: exit %d, want 1", code)
+	}
+	if out.Len() != 0 {
+		t.Errorf("usage errors must leave stdout empty: %s", out.String())
+	}
+}
+
+func TestNoTargetsExitsTwoWithJSON(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := run([]string{"--scope", scopeFile(t), "-d", "example.org"}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if !strings.HasPrefix(out.String(), `{"schema_version":1,`) {
+		t.Errorf("stdout must be the JSON result: %s", out.String())
+	}
+	var v output
+	if err := json.Unmarshal(out.Bytes(), &v); err != nil || len(v.Errors) != 1 || v.Errors[0].Kind != "no_targets" || v.Errors[0].Hint == "" {
+		t.Errorf("stdout = %s", out.String())
 	}
 }
 
@@ -411,5 +426,98 @@ func TestKnownBadDnsxAndNamesWithoutALine(t *testing.T) {
 	}
 	if !listed {
 		t.Errorf("api.example.com must still be listed, as NOANSWER: %s", out.String())
+	}
+}
+
+func TestOutputStartsWithSchemaVersion(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run([]string{"--scope", scopeFile(t), "--input", "../../testdata/sample.jsonl"}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	if !strings.HasPrefix(out.String(), `{"schema_version":1,"tool":"raijin-subs",`) {
+		t.Errorf("output must start with schema_version: %.80s", out.String())
+	}
+}
+
+// An invalid scope is reported as structured errors on stdout and nothing runs: the engines are paths
+// that do not exist, and the run must not even look for them.
+func TestInvalidScopeIsStructuredAndStopsBeforeAnyEngine(t *testing.T) {
+	tests := []struct {
+		name, scope, reason, hint string
+	}{
+		{"port", "example.com\nexample.com:443\n", "port in rule", "use the host only: 'example.com'"},
+		{"cidr host bits", "example.com\n10.0.0.7/24\n", "CIDR has host bits set", "10.0.0.0/24"},
+		{"no include rules", "!example.com\n", "no include rules", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "scope.txt")
+			if err := os.WriteFile(p, []byte(tt.scope), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var out, errb bytes.Buffer
+			code := run([]string{"--scope", p, "-d", "example.com", "--subfinder", "/nonexistent/subfinder", "--dnsx", "/nonexistent/dnsx"}, &out, &errb)
+			if code != 2 {
+				t.Fatalf("exit %d for an invalid scope, want 2: %s", code, out.String())
+			}
+			if !strings.HasPrefix(out.String(), `{"schema_version":1,"tool":"raijin-subs",`) {
+				t.Errorf("stdout must be the JSON result: %s", out.String())
+			}
+			var v output
+			if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+				t.Fatal(err)
+			}
+			if len(v.Errors) == 0 {
+				t.Fatalf("no errors in %s", out.String())
+			}
+			for _, e := range v.Errors {
+				if e.Kind != "scope" {
+					t.Errorf("kind = %q, want scope", e.Kind)
+				}
+			}
+			if h := v.Errors[len(v.Errors)-1].Hint; !strings.Contains(h, tt.reason) || !strings.Contains(h, tt.hint) {
+				t.Errorf("hint %q should mention %q and %q", h, tt.reason, tt.hint)
+			}
+			if len(v.Findings) != 0 || v.Raw != "" || !strings.Contains(v.Summary, "nothing scanned") {
+				t.Errorf("nothing should have run: %s", out.String())
+			}
+			for _, e := range v.Errors {
+				if e.Kind == "missing_engine" {
+					t.Errorf("an engine was looked for: %s", out.String())
+				}
+			}
+		})
+	}
+}
+
+func TestInvalidScopeInTableFormat(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "scope.txt")
+	if err := os.WriteFile(p, []byte("example.com:443\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := run([]string{"--scope", p, "--format", "table", "--input", "../../testdata/sample.jsonl"}, &out, &errb); code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if !strings.Contains(out.String(), "error    scope: line 1: port in rule") {
+		t.Errorf("table: %s", out.String())
+	}
+}
+
+func TestStateMarksNewOnlyOnTheFirstRun(t *testing.T) {
+	st := filepath.Join(t.TempDir(), "state.json")
+	args := []string{"--scope", scopeFile(t), "--input", "../../testdata/sample.jsonl", "--state", st}
+	var first, second, errb bytes.Buffer
+	if code := run(args, &first, &errb); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	if code := run(args, &second, &errb); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	if !strings.Contains(first.String(), `, 5 new"`) || !strings.Contains(first.String(), `"new":true`) {
+		t.Errorf("first run: %s", first.String())
+	}
+	if !strings.Contains(second.String(), `, 0 new"`) || strings.Contains(second.String(), `"new":true`) {
+		t.Errorf("second run: %s", second.String())
 	}
 }
